@@ -1,0 +1,32 @@
+import { useState } from 'react';
+import { Building2, Filter, MapPin, Search, SlidersHorizontal, Sparkles, Users } from 'lucide-react';
+import { companySizes, industries, locations, titles, type SearchFilters } from '@/data';
+
+type SearchBarProps = {
+  query: string;
+  filters: SearchFilters;
+  onQueryChange: (query: string) => void;
+  onFilterChange: (key: keyof SearchFilters, value: string | string[]) => void;
+  onClearFilters: () => void;
+  onSearch: () => void;
+};
+
+function SuggestInput({ label, value, onChange, suggestions, placeholder, testId }: { label: string; value: string | string[]; onChange: (value: string | string[]) => void; suggestions: string[]; placeholder: string; testId: string }) {
+  const isMulti = Array.isArray(value);
+  const values = isMulti ? value : value ? [value] : [];
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const normalizedInput = inputValue.trim().toLowerCase();
+  const matches = suggestions.filter(item => !values.includes(item) && item.toLowerCase().includes(normalizedInput)).slice(0, 12);
+  const addValue = (nextValue: string) => { if (!nextValue.trim() || values.some(value => value.toLowerCase() === nextValue.trim().toLowerCase())) return; onChange(isMulti ? [...values, nextValue.trim()] : nextValue.trim()); setInputValue(''); setOpen(true); };
+  const removeValue = (nextValue: string) => onChange(isMulti ? values.filter(item => item !== nextValue) : '');
+  return <label className="relative block flex-1"><span className="eyebrow mb-2 block">{label}</span><div className="field flex min-h-[38px] flex-wrap items-center gap-1 pr-8 text-[12px]"><div className="flex flex-wrap gap-1">{values.map(value => <span className="tag px-1.5 py-1 text-[9px]" key={value}>{value}<button type="button" className="ml-0.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]" onMouseDown={event => event.preventDefault()} onClick={() => removeValue(value)} aria-label={`Remove ${value}`}>×</button></span>)}</div><input data-testid={testId} className="min-w-[80px] flex-1 bg-transparent py-1 text-[12px] outline-none placeholder:text-[hsl(var(--muted-foreground))]" value={inputValue} placeholder={values.length ? 'Add another' : placeholder} onFocus={() => setOpen(true)} onChange={event => { setInputValue(event.target.value); setOpen(true); }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); const exactMatch = matches.find(match => match.toLowerCase() === inputValue.trim().toLowerCase()); addValue(exactMatch ?? inputValue); } }} onBlur={() => setTimeout(() => setOpen(false), 150)} /></div><SlidersAndIcon label={label} />{open && matches.length > 0 && <div className="filter-suggestions absolute left-0 right-0 top-[68px] z-20 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-1 shadow-xl">{matches.map(match => <button key={match} type="button" data-testid={`suggestion-${testId}-${match.replaceAll(' ', '-').toLowerCase()}`} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[11px] font-semibold hover:bg-[hsl(var(--muted))]" onMouseDown={event => { event.preventDefault(); addValue(match); }}><Search size={12} className="text-[hsl(var(--muted-foreground))]" />{match}</button>)}</div>}</label>;
+}
+
+function SlidersAndIcon({ label }: { label: string }) {
+  return <span className="pointer-events-none absolute right-2.5 top-[34px] text-[hsl(var(--muted-foreground))]">{label === 'Location' ? <MapPin size={14} /> : label === 'Industry' ? <Building2 size={14} /> : <Users size={14} />}</span>;
+}
+
+export default function SearchBar({ query, filters, onQueryChange, onFilterChange, onClearFilters, onSearch }: SearchBarProps) {
+  return <section className="search-hero card mb-5 overflow-visible p-4 md:p-5"><div className="relative"><span className="eyebrow mb-2 block text-[hsl(var(--primary))]">Your research brief</span><div className="flex items-center gap-2 rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--card))] p-2 focus-within:border-[hsl(var(--primary))] focus-within:ring-4 focus-within:ring-[hsl(var(--primary)/.1)]"><Sparkles size={19} className="ml-1 shrink-0 text-[hsl(var(--accent))]" /><input data-testid="input-search-query" value={query} onChange={e => onQueryChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSearch(); }} className="min-w-0 flex-1 bg-transparent px-1 text-[15px] font-bold leading-6 tracking-[-.025em] outline-none placeholder:text-[hsl(var(--muted-foreground))]" placeholder="e.g. Brand Managers in clothing companies in Pakistan" /><button data-testid="button-search-query" className="btn-primary shrink-0 flex items-center gap-2" onClick={onSearch}><Search size={14} /> Search</button></div></div><div className="mt-5 grid gap-3 border-t border-[hsl(var(--border))] pt-4 md:grid-cols-4"><SuggestInput label="Industry" value={filters.industry} onChange={v => onFilterChange('industry', v)} suggestions={industries} placeholder="Any industry" testId="input-filter-industry" /><SuggestInput label="Location" value={filters.location} onChange={v => onFilterChange('location', v)} suggestions={locations} placeholder="Any country or city" testId="input-filter-location" /><label className="block flex-1"><span className="eyebrow mb-2 block">Company size</span><select data-testid="input-filter-company-size" className="field text-[12px]" value={filters.companySize} onChange={e => onFilterChange('companySize', e.target.value)}><option value="">Any company size</option>{companySizes.map(size => <option key={size} value={size}>{size} employees</option>)}</select></label><SuggestInput label="Job title" value={filters.title} onChange={v => onFilterChange('title', v)} suggestions={titles} placeholder="Any decision maker" testId="input-filter-title" /></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-[10px] font-semibold text-[hsl(var(--muted-foreground))]"><Filter size={13} /><span>{Object.values(filters).filter(Boolean).length} filters active</span><button data-testid="button-clear-filters" className="btn-quiet p-0 text-[10px] text-[hsl(var(--primary))]" onClick={onClearFilters}>Clear</button></div><button data-testid="button-run-search" className="btn-primary flex items-center gap-2" onClick={onSearch}><Search size={14} /> Run discovery <span className="ml-1 opacity-60">↵</span></button></div></section>;
+}
