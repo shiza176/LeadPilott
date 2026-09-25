@@ -48,15 +48,6 @@ export type SearchRecord = {
   resultCount: number;
 };
 
-export const companies: Company[] = [
-  { id: 'sapphire-textiles', name: 'Sapphire Textiles', initials: 'ST', industry: 'Apparel & Fashion', location: 'Lahore, Pakistan', size: '5,000+', website: 'sapphiretextiles.com', linkedin: 'linkedin.com/company/sapphire-textiles', description: 'Vertically integrated textile and retail group.', founded: 1969, peopleCount: 118 },
-  { id: 'khaadi', name: 'Khaadi', initials: 'KH', industry: 'Apparel & Fashion', location: 'Karachi, Pakistan', size: '1,000–5,000', website: 'khaadi.com', linkedin: 'linkedin.com/company/khaadi', description: 'A design-led lifestyle brand.', founded: 1998, peopleCount: 84 },
-];
-
-export const leads: Lead[] = [
-  { id: 'l-amina', name: 'Amina Rahman', initials: 'AR', role: 'Brand Manager', title: 'Senior Brand Manager', companyId: 'sapphire-textiles', companyName: 'Sapphire Textiles', industry: 'Apparel & Fashion', location: 'Lahore, Pakistan', email: 'amina.rahman@sapphiretextiles.com', website: 'sapphiretextiles.com', linkedin: 'linkedin.com/in/amina-rahman', seniority: 'Senior', department: 'Marketing', score: 94, saved: true },
-];
-
 export const initialSearches: SearchRecord[] = [
   { id: 's-1', query: 'Brand Managers in clothing companies in Pakistan', filters: { industry: ['Apparel & Fashion'], location: 'Pakistan', companySize: '', title: ['Brand Manager'] }, createdAt: '2025-04-18T10:32:00', resultCount: 6 },
 ];

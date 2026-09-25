@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Bot, Send, Sparkles, X } from "lucide-react";
+import { authHeaders } from "@/api/client";
 
 type Message = {
   role: "user" | "assistant";
@@ -42,6 +43,7 @@ export default function AiAssistantPanel({
       const response = await fetch("http://localhost:4000/api/ai/chat", {
         method: "POST",
         headers: {
+          ...authHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

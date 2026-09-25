@@ -11,7 +11,7 @@ import {
 const router: IRouter = Router();
 
 // GET all saved items
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
     const savedCompanies = await db
       .select({
@@ -20,7 +20,8 @@ router.get("/", async (_req, res) => {
         company: companiesTable,
       })
       .from(savedCompaniesTable)
-      .innerJoin(companiesTable, eq(savedCompaniesTable.companyId, companiesTable.id));
+      .innerJoin(companiesTable, eq(savedCompaniesTable.companyId, companiesTable.id))
+      .where(eq(savedCompaniesTable.userId, req.userId));
 
     const savedLeads = await db
       .select({
@@ -29,7 +30,8 @@ router.get("/", async (_req, res) => {
         lead: leadsTable,
       })
       .from(savedLeadsTable)
-      .innerJoin(leadsTable, eq(savedLeadsTable.leadId, leadsTable.id));
+      .innerJoin(leadsTable, eq(savedLeadsTable.leadId, leadsTable.id))
+      .where(eq(savedLeadsTable.userId, req.userId));
 
     return res.json({
       savedCompanyIds: savedCompanies.map((c) => String(c.company.id)),
@@ -81,11 +83,14 @@ router.post("/companies", async (req, res) => {
     const existing = await db
       .select()
       .from(savedCompaniesTable)
-      .where(eq(savedCompaniesTable.companyId, companyId))
+      .where(and(
+        eq(savedCompaniesTable.companyId, companyId),
+        eq(savedCompaniesTable.userId, req.userId),
+      ))
       .limit(1);
 
     if (existing.length === 0) {
-      await db.insert(savedCompaniesTable).values({ companyId });
+      await db.insert(savedCompaniesTable).values({ companyId, userId: req.userId });
     }
 
     return res.json({ success: true, companyId: String(companyId) });
@@ -105,7 +110,10 @@ router.delete("/companies/:id", async (req, res) => {
 
     await db
       .delete(savedCompaniesTable)
-      .where(eq(savedCompaniesTable.companyId, companyId));
+      .where(and(
+        eq(savedCompaniesTable.companyId, companyId),
+        eq(savedCompaniesTable.userId, req.userId),
+      ));
 
     return res.json({ success: true, companyId: String(companyId) });
   } catch (error) {
@@ -126,11 +134,14 @@ router.post("/leads", async (req, res) => {
     const existing = await db
       .select()
       .from(savedLeadsTable)
-      .where(eq(savedLeadsTable.leadId, leadId))
+      .where(and(
+        eq(savedLeadsTable.leadId, leadId),
+        eq(savedLeadsTable.userId, req.userId),
+      ))
       .limit(1);
 
     if (existing.length === 0) {
-      await db.insert(savedLeadsTable).values({ leadId });
+      await db.insert(savedLeadsTable).values({ leadId, userId: req.userId });
     }
 
     return res.json({ success: true, leadId: String(leadId) });
@@ -150,7 +161,10 @@ router.delete("/leads/:id", async (req, res) => {
 
     await db
       .delete(savedLeadsTable)
-      .where(eq(savedLeadsTable.leadId, leadId));
+      .where(and(
+        eq(savedLeadsTable.leadId, leadId),
+        eq(savedLeadsTable.userId, req.userId),
+      ));
 
     return res.json({ success: true, leadId: String(leadId) });
   } catch (error) {

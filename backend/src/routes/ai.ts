@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq, ilike, or } from "drizzle-orm";
-import { db, companiesTable, searchHistoryTable } from "@workspace/db";
+import { db, companiesTable, leadsTable, searchHistoryTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -19,7 +19,8 @@ function normalize(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function makeSourceId(name: string, city: string): string {
+function makeSourceId(name: 
+  string, city: string): string {
   return `${normalize(name).toLowerCase()}-${normalize(city).toLowerCase()}`
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
@@ -29,6 +30,50 @@ function isValidApiKey(key?: string): boolean {
   if (!key) return false;
   const trimmed = key.trim();
   return trimmed.length > 10 && !trimmed.startsWith("your_optional_");
+}
+function deriveSeniority(title: string): string {
+  const t = title.toLowerCase();
+  if (/(chief|ceo|cfo|coo|cto|cmo|founder|president|\bvp\b|vice president)/.test(t)) return "Executive";
+  if (/(director|head of|principal)/.test(t)) return "Senior";
+  if (/(manager|lead)/.test(t)) return "Mid";
+  return "Junior";
+}
+
+function deriveDepartment(title: string): string {
+  const t = title.toLowerCase();
+  if (/(market|brand|growth)/.test(t)) return "Marketing";
+  if (/(sale|revenue|business development)/.test(t)) return "Sales";
+  if (/(engineer|develop|tech|product)/.test(t)) return "Engineering";
+  if (/(financ|account)/.test(t)) return "Finance";
+  if (/(hr|people|talent)/.test(t)) return "HR";
+  if (/(operation|ops)/.test(t)) return "Operations";
+  return "General";
+}
+
+function deriveScore(seniority: string): number {
+  const map: Record<string, number> = { Executive: 95, Senior: 85, Mid: 75, Junior: 65 };
+  return map[seniority] ?? 70;
+}
+
+function mapLead(lead: typeof leadsTable.$inferSelect, company: typeof companiesTable.$inferSelect) {
+  const seniority = deriveSeniority(lead.title || "");
+  return {
+    id: String(lead.id),
+    name: lead.name,
+    initials: lead.name.split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase(),
+    role: lead.title || "Professional",
+    title: lead.title || "Professional",
+    companyId: String(company.id),
+    companyName: company.name,
+    industry: company.industry || "Business",
+    location: [company.city, company.country].filter(Boolean).join(", ") || "Location unavailable",
+    email: lead.email || "",
+    website: company.website || "",
+    linkedin: lead.linkedin || "",
+    seniority,
+    department: deriveDepartment(lead.title || ""),
+    score: deriveScore(seniority),
+  };
 }
 
 /* =========================
@@ -233,6 +278,7 @@ router.post("/search", async (req, res) => {
 
             if (savedCompanies.length > 0) {
               await db.insert(searchHistoryTable).values({
+                userId: req.userId,
                 query,
                 filters,
                 results: savedCompanies,
@@ -269,6 +315,140 @@ router.post("/search", async (req, res) => {
   } catch (error) {
     console.error("AI search route error:", error);
     return res.status(500).json({ error: "Failed to perform company search" });
+  }
+});
+/* =========================
+   PEOPLE / LEADS SEARCH ROUTE
+========================= */
+
+router.post("/search-people", async (req, res) => {
+  try {
+    const query = normalize(req.body?.query);
+    const filters = req.body?.filters ?? {};
+
+    if (!query) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+
+    const location = normalize(filters.location);
+    const titles: string[] = Array.isArray(filters.title)
+      ? filters.title.map((t: unknown) => normalize(t)).filter((t: string): t is string => Boolean(t))
+      : [];
+
+    const cacheConditions = [];
+    if (location) cacheConditions.push(ilike(companiesTable.city, `%${location}%`));
+    if (titles.length > 0) {
+      cacheConditions.push(or(...titles.map((t) => ilike(leadsTable.title, `%${t}%`))));
+    }
+
+    const cachedRows = await db
+      .select({ lead: leadsTable, company: companiesTable })
+      .from(leadsTable)
+      .innerJoin(companiesTable, eq(leadsTable.companyId, companiesTable.id))
+      .where(cacheConditions.length > 0 ? and(...cacheConditions) : undefined)
+      .limit(20);
+
+    if (cachedRows.length > 0) {
+      return res.json({
+        people: cachedRows.map((row) => mapLead(row.lead, row.company)),
+        cached: true,
+      });
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (isValidApiKey(apiKey)) {
+      try {
+        const prompt = `Find up to 8 realistic decision-makers relevant to this lead-generation search: "${query}". Location: ${location || "Any"}. Return JSON only in format { "people": [{ "name": "Full Name", "title": "Job Title", "companyName": "Company Name", "companyIndustry": "Industry", "companyCity": "City", "companyCountry": "Country", "companyWebsite": "domain.com" }] }`;
+
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:5173",
+            "X-Title": "LeadPilot",
+          },
+          body: JSON.stringify({
+            model: "nvidia/nemotron-3.5-lightning:free",
+            messages: [
+              { role: "system", content: "You return people/lead search results as JSON only." },
+              { role: "user", content: prompt },
+            ],
+            response_format: { type: "json_object" },
+          }),
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as OpenRouterResponse;
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            const aiPeople = Array.isArray(parsed.people) ? parsed.people : [];
+            const results: Array<{ lead: typeof leadsTable.$inferSelect; company: typeof companiesTable.$inferSelect }> = [];
+
+            for (const person of aiPeople) {
+              const name = normalize(person.name);
+              const title = normalize(person.title) || "Professional";
+              const companyName = normalize(person.companyName);
+              if (!name || !companyName) continue;
+
+              const city = normalize(person.companyCity);
+              const country = normalize(person.companyCountry);
+              const sourceId = makeSourceId(companyName, city);
+
+              const existingCompany = await db
+                .select()
+                .from(companiesTable)
+                .where(and(eq(companiesTable.source, "openrouter"), eq(companiesTable.sourceId, sourceId)))
+                .limit(1);
+
+              let company;
+              if (existingCompany.length > 0) {
+                company = existingCompany[0];
+              } else {
+                const insertedCompany = await db
+                  .insert(companiesTable)
+                  .values({
+                    name: companyName,
+                    industry: normalize(person.companyIndustry) || null,
+                    city: city || null,
+                    country: country || null,
+                    website: normalize(person.companyWebsite) || null,
+                    description: null,
+                    founded: null,
+                    size: null,
+                    source: "openrouter",
+                    sourceId,
+                  })
+                  .returning();
+                company = insertedCompany[0];
+              }
+
+              const insertedLead = await db
+                .insert(leadsTable)
+                .values({ name, title, companyId: company.id, email: null, linkedin: null })
+                .returning();
+
+              results.push({ lead: insertedLead[0], company });
+            }
+
+            if (results.length > 0) {
+              return res.json({
+                people: results.map((r) => mapLead(r.lead, r.company)),
+                cached: false,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("OpenRouter people search error:", err);
+      }
+    }
+
+    return res.json({ people: [], cached: false });
+  } catch (error) {
+    console.error("AI people search error:", error);
+    return res.status(500).json({ error: "Failed to perform people search" });
   }
 });
 

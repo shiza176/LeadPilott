@@ -33,9 +33,24 @@ export const leadsTable = pgTable("leads", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const usersTable = pgTable("users", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  resetToken: text("reset_token"),
+  resetTokenExpiry: timestamp("reset_token_expiry"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueEmail: unique().on(table.email),
+}));
+
+
+
 // SAVED COMPANIES — abhi bina login ke, global save list
 export const savedCompaniesTable = pgTable("saved_companies", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id),
   companyId: integer("company_id").references(() => companiesTable.id).notNull(),
   savedAt: timestamp("saved_at").defaultNow().notNull(),
 });
@@ -43,6 +58,7 @@ export const savedCompaniesTable = pgTable("saved_companies", {
 // SAVED LEADS
 export const savedLeadsTable = pgTable("saved_leads", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id),
   leadId: integer("lead_id").references(() => leadsTable.id).notNull(),
   savedAt: timestamp("saved_at").defaultNow().notNull(),
 });
@@ -50,6 +66,7 @@ export const savedLeadsTable = pgTable("saved_leads", {
 // SEARCH HISTORY — user ne kya search kiya
 export const searchHistoryTable = pgTable("search_history", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id),
   query: text("query").notNull(),
   filters: jsonb("filters"),
   results: jsonb("results"),
@@ -63,3 +80,20 @@ export type Company = typeof companiesTable.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Lead = typeof leadsTable.$inferSelect;
 export type InsertLead = z.infer<typeof insertLeadSchema>;
+
+
+// USER SETTINGS — har user ki apni workspace preferences
+export const userSettingsTable = pgTable("user_settings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id).notNull(),
+  workspace: text("workspace"),
+  role: text("role"),
+  defaultLocation: text("default_location"),
+  resultsPerPage: integer("results_per_page").default(25),
+  emailAlerts: integer("email_alerts").default(1), // 1 = true, 0 = false
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueUser: unique().on(table.userId),
+}));
+
+export type UserSettings = typeof userSettingsTable.$inferSelect;
