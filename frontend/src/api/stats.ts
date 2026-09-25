@@ -3,6 +3,10 @@ import { authHeaders } from "./client";
 export type StatsResponse = {
   leadsCount: number;
   avgLeadQuality: number;
+  verifiedEmailPercent: number;
+  decisionMakerPercent: number;
+  activeWebsitePercent: number;
+  chartData: { date: string; count: number }[];
 };
 
 export async function fetchStats(): Promise<StatsResponse> {

@@ -59,16 +59,29 @@ export default function Dashboard({
   savedCompanyIds: string[];
 }) {
   const [, navigate] = useLocation();
-  const chart = [34, 51, 43, 64, 58, 76, 68, 84, 73, 92, 88, 100];
+  const [chartData, setChartData] = useState<{ date: string; count: number }[]>(
+    [],
+  );
   const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
   const firstName = storedUser?.name?.split(" ")[0] || "there";
   const [leadsCount, setLeadsCount] = useState<number | null>(null);
   const [avgLeadQuality, setAvgLeadQuality] = useState<number | null>(null);
+  const [qualitySignals, setQualitySignals] = useState({
+    verifiedEmailPercent: 0,
+    decisionMakerPercent: 0,
+    activeWebsitePercent: 0,
+  });
   useEffect(() => {
     fetchStats()
       .then((data) => {
         setLeadsCount(data.leadsCount);
         setAvgLeadQuality(data.avgLeadQuality);
+        setQualitySignals({
+          verifiedEmailPercent: data.verifiedEmailPercent ?? 0,
+          decisionMakerPercent: data.decisionMakerPercent ?? 0,
+          activeWebsitePercent: data.activeWebsitePercent ?? 0,
+        });
+        setChartData(data.chartData ?? []);
       })
       .catch(() => {
         setLeadsCount(0);
@@ -142,27 +155,36 @@ export default function Dashboard({
             </button>
           </div>
           <div className="flex h-[205px] items-end gap-2 border-b border-l border-[hsl(var(--border))] px-3 pb-0 pt-4">
-            {chart.map((height, i) => (
-              <div
-                key={i}
-                className="group relative flex h-full flex-1 items-end"
-              >
+            {chartData.map((day, i) => {
+              const maxCount = Math.max(...chartData.map((d) => d.count), 1);
+              const height = Math.round((day.count / maxCount) * 100);
+              return (
                 <div
-                  className={`w-full rounded-t-[3px] transition-all duration-300 group-hover:opacity-80 ${i === 9 ? "bg-[hsl(var(--accent))]" : "bg-[hsl(var(--primary)/.72)]"}`}
-                  style={{ height: `${height}%` }}
-                />
-                <span className="absolute -top-5 left-1/2 hidden -translate-x-1/2 rounded bg-[hsl(var(--foreground))] px-1.5 py-0.5 font-mono text-[9px] text-[hsl(var(--background))] group-hover:block">
-                  {Math.round(height * 1.4)}
-                </span>
-              </div>
-            ))}
+                  key={day.date}
+                  className="group relative flex h-full flex-1 items-end"
+                >
+                  <div
+                    className={`w-full rounded-t-[3px] transition-all duration-300 group-hover:opacity-80 ${i === chartData.length - 1 ? "bg-[hsl(var(--accent))]" : "bg-[hsl(var(--primary)/.72)]"}`}
+                    style={{ height: `${height}%` }}
+                  />
+                  <span className="absolute -top-5 left-1/2 hidden -translate-x-1/2 rounded bg-[hsl(var(--foreground))] px-1.5 py-0.5 font-mono text-[9px] text-[hsl(var(--background))] group-hover:block">
+                    {day.count}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           <div className="mt-3 flex justify-between pl-3 text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
-            <span>Mar 26</span>
-            <span>Apr 02</span>
-            <span>Apr 09</span>
-            <span>Apr 16</span>
-            <span>Apr 24</span>
+            {[0, 3, 6, 9, 11].map((idx) => (
+              <span key={idx}>
+                {chartData[idx]
+                  ? new Date(chartData[idx].date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : ""}
+              </span>
+            ))}
           </div>
         </section>
         <section className="card overflow-hidden">
@@ -246,20 +268,20 @@ export default function Dashboard({
           <div className="space-y-4">
             <Signal
               label="Profiles with verified email"
-              value="76%"
-              width="76%"
+              value={`${qualitySignals.verifiedEmailPercent}%`}
+              width={`${qualitySignals.verifiedEmailPercent}%`}
               color="teal"
             />
             <Signal
               label="Leads with decision-making titles"
-              value="68%"
-              width="68%"
+              value={`${qualitySignals.decisionMakerPercent}%`}
+              width={`${qualitySignals.decisionMakerPercent}%`}
               color="orange"
             />
             <Signal
               label="Companies with active websites"
-              value="91%"
-              width="91%"
+              value={`${qualitySignals.activeWebsitePercent}%`}
+              width={`${qualitySignals.activeWebsitePercent}%`}
               color="blue"
             />
           </div>
