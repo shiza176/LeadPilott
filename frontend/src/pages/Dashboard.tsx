@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { fetchStats } from "@/api/stats";
 import {
   ArrowUpRight,
   BarChart3,
@@ -60,6 +62,19 @@ export default function Dashboard({
   const chart = [34, 51, 43, 64, 58, 76, 68, 84, 73, 92, 88, 100];
   const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
   const firstName = storedUser?.name?.split(" ")[0] || "there";
+  const [leadsCount, setLeadsCount] = useState<number | null>(null);
+  const [avgLeadQuality, setAvgLeadQuality] = useState<number | null>(null);
+  useEffect(() => {
+    fetchStats()
+      .then((data) => {
+        setLeadsCount(data.leadsCount);
+        setAvgLeadQuality(data.avgLeadQuality);
+      })
+      .catch(() => {
+        setLeadsCount(0);
+        setAvgLeadQuality(0);
+      });
+  }, []);
   return (
     <div className="animate-rise">
       <SectionHeader
@@ -84,8 +99,8 @@ export default function Dashboard({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
           label="Leads discovered"
-          value="184"
-          detail="+26% vs. last month"
+          value={leadsCount === null ? "…" : leadsCount.toString()}
+          detail="Total leads found so far"
           icon={Users}
         />
         <Metric
@@ -101,11 +116,11 @@ export default function Dashboard({
           detail="Total searches so far"
           icon={Search}
           accent="blue"
-        /> 
+        />
         <Metric
           label="Avg. lead quality"
-          value="82.4"
-          detail="+4.8 points this month"
+          value={avgLeadQuality === null ? "…" : avgLeadQuality.toString()}
+          detail="Based on lead seniority"
           icon={BarChart3}
           accent="pink"
         />
